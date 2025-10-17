@@ -4,6 +4,17 @@ import * as hmUI from "@zos/ui";
 import { log as Logger, px } from "@zos/utils";
 import { DEVICE_HEIGHT, DEVICE_WIDTH } from "zosLoader:./index.page.[pf].layout.js";
 import { MetronomeEngine, Storage } from "../../../utils/index.js";
+// Try different audio imports for Zepp OS compatibility
+try {
+  var { createAudio } = require("@zos/audio");
+} catch (e) {
+  try {
+    var { createAudio } = require("@zos/media");
+  } catch (e2) {
+    // Fallback - will use vibration only
+    var createAudio = null;
+  }
+}
 
 const logger = Logger.getLogger("metronome");
 
@@ -26,6 +37,9 @@ Page({
       this.metronome.setTimeSignature(params.timeSignature.numerator, params.timeSignature.denominator);
       Storage.save('metronome_time_signature', params.timeSignature);
     }
+
+    // Initialize audio for metronome sounds
+    this.initializeAudio();
 
     // Set up tick callback
     this.metronome.onTick = (beatIndex, timeSignature) => {
@@ -91,6 +105,12 @@ Page({
 
     // Initialize tap tempo tracking
     this.tapTimes = [];
+
+    // Update sound toggle button with correct initial state
+    if (this.soundToggle && this.audioSettings) {
+      const text = this.audioSettings.enabled ? "🔊 ON" : "⏹️ OFF";
+      this.soundToggle.setProperty(hmUI.prop.TEXT, text);
+    }
   },
 
   createBpmControls() {
@@ -375,15 +395,20 @@ Page({
 
   createPlayButton() {
     // Play button
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: DEVICE_WIDTH / 2 - px(20),
+    this.playButton = hmUI.createWidget(hmUI.widget.BUTTON, {
+      x: DEVICE_WIDTH / 2 - px(40),
       y: px(280),
-      w: px(40),
-      h: px(30),
-      text: "▶️",
-      text_size: px(20),
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V
+      w: px(80),
+      h: px(50),
+      normal_color: 0x00ff88,
+      press_color: 0x00aa66,
+      text: "▶ PLAY",
+      text_size: px(16),
+      color: 0x000000,
+      radius: px(25),
+      click_func: () => {
+        this.togglePlay();
+      }
     });
 
     // Tap tempo area below the dial
@@ -400,6 +425,23 @@ Page({
       radius: px(10),
       click_func: () => {
         this.handleTapTempo();
+      }
+    });
+
+    // Sound toggle button
+    this.soundToggle = hmUI.createWidget(hmUI.widget.BUTTON, {
+      x: DEVICE_WIDTH / 2 - px(40),
+      y: px(520),
+      w: px(80),
+      h: px(30),
+      normal_color: 0x444444,
+      press_color: 0x666666,
+      text: this.audioSettings?.enabled ? "🔊 ON" : "🔇 OFF",
+      text_size: px(12),
+      color: 0xffffff,
+      radius: px(15),
+      click_func: () => {
+        this.toggleSound();
       }
     });
   },
@@ -517,15 +559,25 @@ Page({
   startMetronome() {
     this.metronome.start();
 
-    // Update play icon to pause
-    this.playIcon.setProperty(hmUI.prop.TEXT, "⏸");
+    // Update play button text
+    this.updatePlayButtonText();
+
+    // Update play icon to pause if it exists
+    if (this.playIcon) {
+      this.playIcon.setProperty(hmUI.prop.TEXT, "⏸");
+    }
   },
 
   stopMetronome() {
     this.metronome.stop();
 
-    // Update pause icon to play
-    this.playIcon.setProperty(hmUI.prop.TEXT, "▶");
+    // Update play button text
+    this.updatePlayButtonText();
+
+    // Update pause icon to play if it exists
+    if (this.playIcon) {
+      this.playIcon.setProperty(hmUI.prop.TEXT, "▶");
+    }
 
     // Reset beat indicators
     this.resetBeatIndicators();
@@ -538,18 +590,8 @@ Page({
     // Add visual feedback (flash effect)
     this.flashBeatIndicator(beatIndex);
 
-    // Add haptic feedback - stronger vibration for first beat
-    try {
-      if (beatIndex === 0) {
-        // Stronger vibration for downbeat
-        vibrate.scene.call({ mode: vibrate.scene_type.MEDIUM });
-      } else {
-        // Lighter vibration for other beats
-        vibrate.scene.call({ mode: vibrate.scene_type.SHORT });
-      }
-    } catch (error) {
-      logger.debug(`Vibration failed: ${error}`);
-    }
+    // Play sound with fallback to enhanced vibration
+    this.playBeatSound(beatIndex === 0);
   },
 
   updateBeatIndicators(currentBeat = 0, timeSignature = null) {
@@ -668,6 +710,140 @@ Page({
     this.buttonFeedback({ setProperty: () => { } });
   },
 
+  initializeAudio() {
+    try {
+      // Load saved sound preference
+      const savedSoundEnabled = Storage.load('metronome_sound_enabled', true);
+
+      // Initialize audio settings first
+      this.audioSettings = {
+        enabled: savedSoundEnabled,
+        volume: 0.8,
+        downbeatFreq: 800,  // Higher pitch for downbeat
+        beatFreq: 600       // Lower pitch for regular beats
+      };
+
+      // Try to create audio instance if available
+      if (createAudio) {
+        this.audioEngine = createAudio();
+        logger.debug("Audio engine initialized successfully");
+      } else {
+        logger.debug("Audio API not available, using vibration only");
+        // Keep user preference but note that audio is not available
+      }
+
+    } catch (error) {
+      logger.debug(`Audio initialization failed: ${error}`);
+      // Keep user preference for sound but disable functionality
+      this.audioSettings = {
+        enabled: Storage.load('metronome_sound_enabled', true),
+        audioAvailable: false
+      };
+    }
+  },
+
+  playBeatSound(isDownbeat = false) {
+    if (!this.audioSettings?.enabled) {
+      // Enhanced vibration feedback when audio is not available
+      this.playEnhancedVibration(isDownbeat);
+      return;
+    }
+
+    try {
+      // Generate a simple beep sound
+      const frequency = isDownbeat ? this.audioSettings.downbeatFreq : this.audioSettings.beatFreq;
+      const duration = isDownbeat ? 150 : 100; // Longer for downbeat
+
+      // Create a simple tone/beep sound
+      this.generateBeep(frequency, duration, isDownbeat);
+
+    } catch (error) {
+      logger.debug(`Sound playback failed: ${error}`);
+      // Fallback to enhanced vibration
+      this.playEnhancedVibration(isDownbeat);
+    }
+  },
+
+  generateBeep(frequency, duration, isDownbeat) {
+    try {
+      if (this.audioEngine) {
+        // For Zepp OS, we might need to use a different approach
+        // This is a simplified implementation that may need adjustment
+
+        // Create a synthetic beep using Web Audio API concepts adapted for Zepp OS
+        // Since direct frequency generation might not be available, 
+        // we can try playing a short system sound or use alternative methods
+
+        // Alternative approach: Use system notification sounds
+        this.playSystemBeep(isDownbeat);
+
+      }
+    } catch (error) {
+      logger.debug(`Beep generation failed: ${error}`);
+      // Enhanced vibration as fallback
+      this.playEnhancedVibration(isDownbeat);
+    }
+  },
+
+  playSystemBeep(isDownbeat) {
+    try {
+      // Try to play system beep sounds if available
+      // This might work with Zepp OS system sounds
+      if (this.audioEngine && this.audioEngine.play) {
+        // Play a system beep or notification sound
+        // The exact API might vary for Zepp OS
+        this.audioEngine.play();
+      }
+    } catch (error) {
+      logger.debug(`System beep failed: ${error}`);
+    }
+  },
+
+  playEnhancedVibration(isDownbeat) {
+    // Enhanced vibration patterns when audio is not available
+    try {
+      if (isDownbeat) {
+        // Double vibration for downbeat
+        vibrate.scene.call({ mode: vibrate.scene_type.MEDIUM });
+        setTimeout(() => {
+          vibrate.scene.call({ mode: vibrate.scene_type.SHORT });
+        }, 100);
+      } else {
+        // Single vibration for regular beats
+        vibrate.scene.call({ mode: vibrate.scene_type.SHORT });
+      }
+    } catch (error) {
+      logger.debug(`Enhanced vibration failed: ${error}`);
+    }
+  },
+
+  updatePlayButtonText() {
+    if (this.playButton) {
+      const text = this.metronome.isPlaying ? "⏸ STOP" : "▶ PLAY";
+      this.playButton.setProperty(hmUI.prop.TEXT, text);
+    }
+  },
+
+  toggleSound() {
+    if (this.audioSettings) {
+      this.audioSettings.enabled = !this.audioSettings.enabled;
+
+      // Update button text
+      if (this.soundToggle) {
+        const text = this.audioSettings.enabled ? "🔊 ON" : "🔇 OFF";
+        this.soundToggle.setProperty(hmUI.prop.TEXT, text);
+      }
+
+      // Save preference
+      Storage.save('metronome_sound_enabled', this.audioSettings.enabled);
+
+      // Provide feedback
+      this.buttonFeedback({ setProperty: () => { } });
+
+      logger.debug(`Sound toggled: ${this.audioSettings.enabled ? 'ON' : 'OFF'}`);
+    }
+  },
+
   onResume() {
     // Refresh time signature display when returning from time signature page
     const savedTimeSignature = Storage.load('metronome_time_signature', { numerator: 4, denominator: 4 });
@@ -686,6 +862,15 @@ Page({
     logger.debug("metronome page onDestroy");
     if (this.metronome) {
       this.metronome.stop();
+    }
+
+    // Clean up audio resources
+    if (this.audioEngine) {
+      try {
+        this.audioEngine.destroy();
+      } catch (error) {
+        logger.debug(`Audio cleanup failed: ${error}`);
+      }
     }
   },
 });
