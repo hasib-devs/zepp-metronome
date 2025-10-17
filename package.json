@@ -5,7 +5,7 @@
   "main": "app.js",
   "scripts": {
     "dev": "zeus dev --target='Amazfit Bip 5 Unity'",
-    "preview": "zeus preview"
+    "preview": "zeus preview --target='Amazfit Bip 5 Unity'"
   },
   "author": "Hasibur Rahman",
   "license": "ISC",
