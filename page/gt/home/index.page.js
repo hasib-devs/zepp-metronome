@@ -90,7 +90,7 @@ Page({
 
     // Beat indicator dots
     this.createBeatIndicators();
-    
+
     // Initialize tap tempo tracking
     this.tapTimes = [];
   },
@@ -325,10 +325,10 @@ Page({
 
     // Make it transparent
     this.dialOverlay.setProperty(hmUI.prop.COLOR, 0x00000000);
-    
+
     // Add gesture handling for circular dial
     let isDialPressed = false;
-    
+
     this.dialOverlay.addEventListener(hmUI.event.CLICK_DOWN, (info) => {
       isDialPressed = true;
       this.handleDialTouch(info.x, info.y, centerX, centerY);
@@ -350,27 +350,27 @@ Page({
     const deltaX = touchX - centerX;
     const deltaY = touchY - centerY;
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    
+
     // Only respond to touches in the dial ring area
     if (distance > px(60) && distance < px(130)) {
       let angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
-      
+
       // Normalize angle to 0-360
       if (angle < 0) angle += 360;
-      
+
       // Convert angle to BPM (0-360 degrees maps to 30-300 BPM)
       const normalizedAngle = (angle + 90) % 360; // Adjust so top is 0
       const bpmRange = this.metronome.maxBpm - this.metronome.minBpm;
       const newBpm = Math.round(this.metronome.minBpm + (normalizedAngle / 360) * bpmRange);
-      
+
       if (newBpm !== this.metronome.bpm) {
         this.metronome.setBpm(newBpm);
         this.updateBpmDisplay();
         this.updateBpmIndicator();
         Storage.save('metronome_bpm', newBpm);
-        
+
         // Provide haptic feedback
-        this.buttonFeedback({ setProperty: () => {} }); // Dummy object for haptic only
+        this.buttonFeedback({ setProperty: () => { } }); // Dummy object for haptic only
       }
     }
   },
@@ -633,12 +633,12 @@ Page({
   handleTapTempo() {
     const now = Date.now();
     this.tapTimes.push(now);
-    
+
     // Keep only the last 5 taps for more accurate averaging
     if (this.tapTimes.length > 5) {
       this.tapTimes.shift();
     }
-    
+
     // Need at least 2 taps to calculate tempo
     if (this.tapTimes.length >= 2) {
       // Calculate average interval between taps
@@ -646,10 +646,10 @@ Page({
       for (let i = 1; i < this.tapTimes.length; i++) {
         totalInterval += this.tapTimes[i] - this.tapTimes[i - 1];
       }
-      
+
       const avgInterval = totalInterval / (this.tapTimes.length - 1);
       const calculatedBpm = Math.round(60000 / avgInterval);
-      
+
       // Only set if it's within reasonable range
       if (calculatedBpm >= this.metronome.minBpm && calculatedBpm <= this.metronome.maxBpm) {
         this.metronome.setBpm(calculatedBpm);
@@ -658,16 +658,16 @@ Page({
         Storage.save('metronome_bpm', calculatedBpm);
       }
     }
-    
+
     // Clear taps after 3 seconds of inactivity
     setTimeout(() => {
       if (this.tapTimes.length > 0 && Date.now() - this.tapTimes[this.tapTimes.length - 1] > 3000) {
         this.tapTimes = [];
       }
     }, 3000);
-    
+
     // Provide feedback
-    this.buttonFeedback({ setProperty: () => {} });
+    this.buttonFeedback({ setProperty: () => { } });
   },
 
   onResume() {
