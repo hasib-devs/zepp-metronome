@@ -1,10 +1,8 @@
+import { push } from "@zos/router";
+import { vibrate } from "@zos/sensor";
 import * as hmUI from "@zos/ui";
 import { log as Logger, px } from "@zos/utils";
-import { push } from "@zos/router";
-import { createTimer, deleteTimer } from "@zos/timer";
-import { getDeviceInfo } from "@zos/device";
-import { vibrate } from "@zos/sensor";
-import { DEVICE_WIDTH, DEVICE_HEIGHT } from "zosLoader:./index.page.[pf].layout.js";
+import { DEVICE_HEIGHT, DEVICE_WIDTH } from "zosLoader:./index.page.[pf].layout.js";
 import { MetronomeEngine, Storage } from "../../../utils/index.js";
 
 const logger = Logger.getLogger("metronome");
@@ -80,13 +78,13 @@ Page({
     this.createBpmControls();
 
     // Circular BPM dial
-    this.createCircularDial();
+    // this.createCircularDial();
 
     // Play/Pause button
     this.createPlayButton();
 
     // Time signature button
-    this.createTimeSignatureButton();
+    // this.createTimeSignatureButton();
 
     // Beat indicator dots
     this.createBeatIndicators();
@@ -376,10 +374,22 @@ Page({
   },
 
   createPlayButton() {
+    // Play button
+    hmUI.createWidget(hmUI.widget.TEXT, {
+      x: DEVICE_WIDTH / 2 - px(20),
+      y: px(280),
+      w: px(40),
+      h: px(30),
+      text: "▶️",
+      text_size: px(20),
+      align_h: hmUI.align.CENTER_H,
+      align_v: hmUI.align.CENTER_V
+    });
+
     // Tap tempo area below the dial
     this.tapTempoArea = hmUI.createWidget(hmUI.widget.BUTTON, {
       x: DEVICE_WIDTH / 2 - px(60),
-      y: px(520),
+      y: px(450),
       w: px(120),
       h: px(50),
       normal_color: 0x2a2a2a,
@@ -391,18 +401,6 @@ Page({
       click_func: () => {
         this.handleTapTempo();
       }
-    });
-
-    // Hand/tap icon
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: DEVICE_WIDTH / 2 - px(20),
-      y: px(530),
-      w: px(40),
-      h: px(30),
-      text: "👆",
-      text_size: px(20),
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V
     });
   },
 
@@ -453,7 +451,7 @@ Page({
   createBeatIndicators() {
     this.beatDots = [];
     const startX = DEVICE_WIDTH / 2 - px(60);
-    const dotY = px(650);
+    const dotY = px(380);
 
     for (let i = 0; i < 4; i++) {
       const dot = hmUI.createWidget(hmUI.widget.CIRCLE, {
